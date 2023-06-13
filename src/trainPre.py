@@ -133,13 +133,13 @@ def args_parse():
         default=12,
         help="Maximum Number of neighbours to consider",
     )
-    parser.add_argument("--batch_size", type=int, default=512, help="Batch size")
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
     parser.add_argument("--workers", type=int, default=0, help="workers")
     parser.add_argument(
         "--pin_memory", type=bool, default=True, help="Set the pin_memory"
     )
     parser.add_argument(
-        "--split", type=list, default=[0.4, 0.1, 0.5], help="Split the dataset"
+        "--split", type=list, default=[0.6, 0.3, 0.1], help="Split the dataset"
     )
     # endregion
     # region 模型配置
