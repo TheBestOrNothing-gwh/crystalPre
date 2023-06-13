@@ -51,9 +51,9 @@ class Normalizer(object):
 
 # 用来保存模型的函数
 def save_models(epoch, model, is_best, path):
-    torch.save(model, os.path.join(path, f"model{epoch}.pth"))
+    torch.save(model.state_dict(), os.path.join(path, f"model{epoch}.pth"))
     if is_best:
-        torch.save(model, os.path.join(path, "best_model.pth"))
+        torch.save(model.state_dict(), os.path.join(path, "best_model.pth"))
 
 
 def show(epochs, path, name, y):
