@@ -3,7 +3,9 @@ import os
 import datetime
 import argparse
 import numpy as np
+import pandas as pd
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
@@ -39,6 +41,72 @@ def save_models(epoch, model, is_best, path):
     torch.save(model, os.path.join(path, f"model{epoch}.pth"))
     if is_best:
         torch.save(model, os.path.join(path, "best_model.pth"))
+
+
+def show(epochs, path, name, y):
+    x = list(range(1, epochs + 1))
+    df = pd.DataFrame({'epochs': x, name: y})
+    plt.figure(figsize=(16, 14))
+    plt.tight_layout()
+    plt.plot('epochs', name, data=df, marker='', color='blue', linewidth=10)
+    plt.savefig(path)
+    
+
+
+def train(loader, model, optimizer, device, split):
+    total_losses = AverageMeter()
+    adj_reconst_losses = AverageMeter()
+    feature_reconst_losses = AverageMeter()
+
+    # 批训练
+    pos_weight = torch.Tensor([0.1, 1, 1, 1, 1, 1]).to(device)
+    model.train()
+    for _, (input, adjs, _) in enumerate(loader):
+        atom_fea, nbr_fea, nbr_fea_idx, crys_atom_idx = (
+            input[0],
+            input[1],
+            input[2],
+            input[3],
+        )
+        # 加载数据到指定空间
+        input_var = (
+            atom_fea.to(device),
+            nbr_fea.to(device),
+            nbr_fea_idx.to(device),
+            [crys_idx.to(device) for crys_idx in crys_atom_idx],
+        )
+        output_var = [adj.to(device) for adj in adjs]
+        # compute output
+        edge_prob_list, atom_feature_list = model(*input_var)
+        # 计算loss
+        loss = 0  # 总loss
+        loss_adj = 0  # 全局loss
+        loss_atom_fea = 0  # 局部loss
+        for j in range(len(edge_prob_list)):
+            # Loss for Global Connectivity Reconstruction
+            adj_p = edge_prob_list[j]
+            adj_o = output_var[j]
+            loss_adj_reconst = F.nll_loss(adj_p, adj_o, weight=pos_weight)
+            loss_adj = loss_adj + loss_adj_reconst
+            loss = loss + split[0] * loss_adj_reconst
+            # Loss for Local Atom Feature Reconstruction
+            atom_fea_p = atom_feature_list[j]
+            atom_fea_o = input_var[0][crys_atom_idx[j]]
+            loss_atom_fea_reconst = F.binary_cross_entropy_with_logits(
+                atom_fea_p, atom_fea_o
+            )
+            loss_atom_fea = loss_atom_fea + loss_atom_fea_reconst
+            loss = loss + split[1] * loss_atom_fea_reconst
+        total_losses.update(loss / len(edge_prob_list), len(edge_prob_list))
+        adj_reconst_losses.update(loss_adj / len(edge_prob_list), len(edge_prob_list))
+        feature_reconst_losses.update(
+            loss_atom_fea / len(edge_prob_list), len(edge_prob_list)
+        )
+        # 反向传播
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    return total_losses.avg, adj_reconst_losses.avg, feature_reconst_losses.avg
 
 
 def args_parse():
@@ -203,69 +271,16 @@ def main():
         if is_best:
             min_loss = total_loss
         save_models(epoch, model, is_best, os.path.join(path, "models"))
-        total_loss_list.append(total_loss)
-        adj_reconst_loss_list.append(adj_reconst_loss)
-        feature_reconst_loss_list.append(feature_reconst_loss)
+        total_loss_list.append(total_loss.cpu().detach().numpy())
+        adj_reconst_loss_list.append(adj_reconst_loss.cpu().detach().numpy())
+        feature_reconst_loss_list.append(feature_reconst_loss.cpu().detach().numpy())
         out.writelines(
             f"Epoch Summary : Epoch : {epoch} Total Loss : {total_loss} Adj Reconst Loss : {adj_reconst_loss} Feature Reconst Loss : {feature_reconst_loss}\n"
         )
     # endregion
-
-
-def train(loader, model, optimizer, device, split):
-    total_losses = AverageMeter()
-    adj_reconst_losses = AverageMeter()
-    feature_reconst_losses = AverageMeter()
-
-    # 批训练
-    pos_weight = torch.Tensor([0.1, 1, 1, 1, 1, 1]).to(device)
-    model.train()
-    for _, (input, adjs, _) in enumerate(loader):
-        atom_fea, nbr_fea, nbr_fea_idx, crys_atom_idx = (
-            input[0],
-            input[1],
-            input[2],
-            input[3],
-        )
-        # 加载数据到指定空间
-        input_var = (
-            atom_fea.to(device),
-            nbr_fea.to(device),
-            nbr_fea_idx.to(device),
-            [crys_idx.to(device) for crys_idx in crys_atom_idx],
-        )
-        output_var = [adj.to(device) for adj in adjs]
-        # compute output
-        edge_prob_list, atom_feature_list = model(*input_var)
-        # 计算loss
-        loss = 0  # 总loss
-        loss_adj = 0  # 全局loss
-        loss_atom_fea = 0  # 局部loss
-        for j in range(len(edge_prob_list)):
-            # Loss for Global Connectivity Reconstruction
-            adj_p = edge_prob_list[j]
-            adj_o = output_var[j]
-            loss_adj_reconst = F.nll_loss(adj_p, adj_o, weight=pos_weight)
-            loss_adj = loss_adj + loss_adj_reconst
-            loss = loss + split[0] * loss_adj_reconst
-            # Loss for Local Atom Feature Reconstruction
-            atom_fea_p = atom_feature_list[j]
-            atom_fea_o = input_var[0][crys_atom_idx[j]]
-            loss_atom_fea_reconst = F.binary_cross_entropy_with_logits(
-                atom_fea_p, atom_fea_o
-            )
-            loss_atom_fea = loss_atom_fea + loss_atom_fea_reconst
-            loss = loss + split[1] * loss_atom_fea_reconst
-        total_losses.update(loss / len(edge_prob_list), len(edge_prob_list))
-        adj_reconst_losses.update(loss_adj / len(edge_prob_list), len(edge_prob_list))
-        feature_reconst_losses.update(
-            loss_atom_fea / len(edge_prob_list), len(edge_prob_list)
-        )
-        # 反向传播
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-    return total_losses.avg, adj_reconst_losses.avg, feature_reconst_losses.avg
+    show(args.epochs, os.path.join(path, "total_loss.png"), "total_loss", total_loss_list)
+    show(args.epochs, os.path.join(path, "adj_reconst_loss.png"), "adj_reconst_loss", adj_reconst_loss_list)
+    show(args.epochs, os.path.join(path, "feature_reconst_loss.png"), "feature_reconst_loss", feature_reconst_loss_list)
 
 
 if __name__ == "__main__":

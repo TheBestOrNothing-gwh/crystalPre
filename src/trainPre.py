@@ -324,10 +324,10 @@ def main():
         if is_best:
             best_mae_error = val_mae
         save_models(epoch, model, is_best, os.path.join(path, "models"))
-        train_loss_list.append(train_loss)
-        train_mae_list.append(train_mae)
-        val_loss_list.append(val_loss)
-        val_mae_list.append(val_mae)
+        train_loss_list.append(train_loss.cpu().detach().numpy())
+        train_mae_list.append(train_mae.cpu().detach().numpy())
+        val_loss_list.append(val_loss.cpu().detach().numpy())
+        val_mae_list.append(val_mae.cpu().detach().numpy())
         out.writelines(
             f"Epoch Summary : Epoch : {epoch} Train Mean Loss : {train_loss} Train MAE : {train_mae} Val Mean Loss : {val_loss} Val MAE : {val_mae} Best Val MAE : {best_mae_error}\n"
         )
