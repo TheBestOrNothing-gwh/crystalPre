@@ -10,72 +10,109 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import MultiStepLR
 from data_prop import *
 from model import CrystalGraphConvNet
+from tools import *
 
 
-class Normalizer(object):
-    """Normalize a Tensor and restore it later."""
+def train(train_loader, model, criterion, optimizer, normalizer, device):
+    # 均方误差，用作损失函数
+    losses = AverageMeter()
+    # 平均绝对误差，用作性能参考
+    mae_errors = AverageMeter()
 
-    def __init__(self, tensor, device):
-        """tensor is taken as a sample to calculate the mean and std"""
-        self.device = device
-        self.mean = torch.mean(tensor).to(self.device)
-        self.std = torch.std(tensor).to(self.device)
-
-    def norm(self, tensor):
-        return (tensor - self.mean) / self.std
-
-    def denorm(self, normed_tensor):
-        return normed_tensor * self.std + self.mean
-
-    def state_dict(self):
-        return {"mean": self.mean, "std": self.std}
-
-    def load_state_dict(self, state_dict):
-        self.mean = state_dict["mean"].to(self.device)
-        self.std = state_dict["std"].to(self.device)
-
-
-def mae(prediction, target):
-    """
-    Computes the mean absolute error between prediction and target
-    计算平均绝对误差
-
-    Parameters
-    ----------
-
-    prediction: torch.Tensor (N, 1)
-    target: torch.Tensor (N, 1)
-    """
-    return torch.mean(torch.abs(target - prediction))
-
-
-# 累计求平均值的方法，用于计算每个epoch的平均误差，因为每个batch进行了一次计算，所以需要统计一下
-class AverageMeter(object):
-    """
-    Computes and stores the average and current value
-    """
-
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
+    # switch to train mode
+    model.train()
+    for _, (input, target, _) in enumerate(train_loader):
+        # 加载数据到指定空间上
+        atom_fea, nbr_fea, nbr_fea_idx, crys_atom_idx = (
+            input[0],
+            input[1],
+            input[2],
+            input[3],
+        )
+        input_var = (
+            atom_fea.to(device),
+            nbr_fea.to(device),
+            nbr_fea_idx.to(device),
+            [crys_idx.to(device) for crys_idx in crys_atom_idx],
+        )
+        target = target.to(device)
+        target_var = normalizer.norm(target)
+        # compute output
+        output = model(*input_var)
+        # measure accuracy and record loss
+        loss = criterion(output, target_var)
+        mae_error = mae(normalizer.denorm(output), target)
+        losses.update(loss, target.size(0))
+        mae_errors.update(mae_error, target.size(0))
+        # compute gradient and do SGD step
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    return losses.avg, mae_errors.avg
 
 
-# 用来保存模型的函数
-def save_models(epoch, model, is_best, path):
-    torch.save(model, os.path.join(path, f"model{epoch}.pth"))
-    if is_best:
-        torch.save(model, os.path.join(path, "best_model.pth"))
+def validate(val_loader, model, criterion, normalizer, device):
+    # 均方误差，用作损失函数
+    losses = AverageMeter()
+    # 平均绝对误差，用作性能参考
+    mae_errors = AverageMeter()
+
+    # switch to evaluate mode
+    model.eval()
+    with torch.no_grad():
+        for i, (input, target, _) in enumerate(val_loader):
+            # 加载数据到指定空间上
+            atom_fea, nbr_fea, nbr_fea_idx, crys_atom_idx = (
+                input[0],
+                input[1],
+                input[2],
+                input[3],
+            )
+            input_var = (
+                atom_fea.to(device),
+                nbr_fea.to(device),
+                nbr_fea_idx.to(device),
+                [crys_idx.to(device) for crys_idx in crys_atom_idx],
+            )
+            target = target.to(device)
+            target_var = normalizer.norm(target)
+            # compute output
+            output = model(*input_var)
+            # measure accuracy and record loss
+            loss = criterion(output, target_var)
+            mae_error = mae(normalizer.denorm(output), target)
+            losses.update(loss, target.size(0))
+            mae_errors.update(mae_error, target.size(0))
+    return losses.avg, mae_errors.avg
+
+
+def test(test_loader, model, criterion, normalizer, device):
+    mae_errors = AverageMeter()
+
+    # switch to evaluate mode
+    model.eval()
+    with torch.no_grad():
+        for i, (input, target, _) in enumerate(test_loader):
+            # 加载数据到指定空间上
+            atom_fea, nbr_fea, nbr_fea_idx, crys_atom_idx = (
+                input[0],
+                input[1],
+                input[2],
+                input[3],
+            )
+            input_var = (
+                atom_fea.to(device),
+                nbr_fea.to(device),
+                nbr_fea_idx.to(device),
+                [crys_idx.to(device) for crys_idx in crys_atom_idx],
+            )
+            target = target.to(device)
+            # compute output
+            output = model(*input_var)
+            # measure accuracy and record loss
+            mae_error = mae(normalizer.denorm(output), target)
+            mae_errors.update(mae_error, target.size(0))
+    return mae_errors.avg
 
 
 def args_parse():
@@ -334,108 +371,6 @@ def main():
     # endregion
     test_mae = test(test_loader, model, criterion, normalizer, device)
     out.writelines(f"Test MAE : {test_mae}\n")
-
-
-def train(train_loader, model, criterion, optimizer, normalizer, device):
-    # 均方误差，用作损失函数
-    losses = AverageMeter()
-    # 平均绝对误差，用作性能参考
-    mae_errors = AverageMeter()
-
-    # switch to train mode
-    model.train()
-    for _, (input, target, _) in enumerate(train_loader):
-        # 加载数据到指定空间上
-        atom_fea, nbr_fea, nbr_fea_idx, crys_atom_idx = (
-            input[0],
-            input[1],
-            input[2],
-            input[3],
-        )
-        input_var = (
-            atom_fea.to(device),
-            nbr_fea.to(device),
-            nbr_fea_idx.to(device),
-            [crys_idx.to(device) for crys_idx in crys_atom_idx],
-        )
-        target = target.to(device)
-        target_var = normalizer.norm(target)
-        # compute output
-        output = model(*input_var)
-        # measure accuracy and record loss
-        loss = criterion(output, target_var)
-        mae_error = mae(normalizer.denorm(output), target)
-        losses.update(loss, target.size(0))
-        mae_errors.update(mae_error, target.size(0))
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-    return losses.avg, mae_errors.avg
-
-
-def validate(val_loader, model, criterion, normalizer, device):
-    # 均方误差，用作损失函数
-    losses = AverageMeter()
-    # 平均绝对误差，用作性能参考
-    mae_errors = AverageMeter()
-
-    # switch to evaluate mode
-    model.eval()
-    with torch.no_grad():
-        for i, (input, target, _) in enumerate(val_loader):
-            # 加载数据到指定空间上
-            atom_fea, nbr_fea, nbr_fea_idx, crys_atom_idx = (
-                input[0],
-                input[1],
-                input[2],
-                input[3],
-            )
-            input_var = (
-                atom_fea.to(device),
-                nbr_fea.to(device),
-                nbr_fea_idx.to(device),
-                [crys_idx.to(device) for crys_idx in crys_atom_idx],
-            )
-            target = target.to(device)
-            target_var = normalizer.norm(target)
-            # compute output
-            output = model(*input_var)
-            # measure accuracy and record loss
-            loss = criterion(output, target_var)
-            mae_error = mae(normalizer.denorm(output), target)
-            losses.update(loss, target.size(0))
-            mae_errors.update(mae_error, target.size(0))
-    return losses.avg, mae_errors.avg
-
-
-def test(test_loader, model, criterion, normalizer, device):
-    mae_errors = AverageMeter()
-
-    # switch to evaluate mode
-    model.eval()
-    with torch.no_grad():
-        for i, (input, target, _) in enumerate(test_loader):
-            # 加载数据到指定空间上
-            atom_fea, nbr_fea, nbr_fea_idx, crys_atom_idx = (
-                input[0],
-                input[1],
-                input[2],
-                input[3],
-            )
-            input_var = (
-                atom_fea.to(device),
-                nbr_fea.to(device),
-                nbr_fea_idx.to(device),
-                [crys_idx.to(device) for crys_idx in crys_atom_idx],
-            )
-            target = target.to(device)
-            # compute output
-            output = model(*input_var)
-            # measure accuracy and record loss
-            mae_error = mae(normalizer.denorm(output), target)
-            mae_errors.update(mae_error, target.size(0))
-    return mae_errors.avg
 
 
 if __name__ == "__main__":
