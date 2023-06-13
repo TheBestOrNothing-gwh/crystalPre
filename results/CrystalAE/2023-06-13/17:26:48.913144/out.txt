@@ -1,0 +1,6 @@
+***** Hyper-Parameters Details ********
+atom_fea_len :64
+n_conv :3
+epochs :200
+lr :0.003
+batch_size :32
