@@ -9,9 +9,9 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import MultiStepLR
 from data import *
-from model import CrystalAE
+from model import *
 from tools import *
-    
+       
 
 def train(loader, model, optimizer, device, split):
     total_losses = AverageMeter()
