@@ -141,23 +141,7 @@ def collate_pool(dataset_list):
 
 
 class GaussianDistance(object):
-    """
-    Expands the distance by Gaussian basis.
-
-    Unit: angstrom
-    """
-
     def __init__(self, dmin, dmax, step, var=None):
-        """
-        Parameters
-        ----------
-        dmin:float
-            Minimum interatomic distance
-        dmax: float
-            Maximum interatomic distance
-        step: float
-            Step size for the Gaussian filter
-        """
         assert dmin < dmax
         assert dmax - dmin > step
         self.filter = np.arange(dmin, dmax + step, step)
@@ -166,32 +150,12 @@ class GaussianDistance(object):
         self.var = var
 
     def expand(self, distances):
-        """
-        Apply Gaussian distance filter to a numpy distance array
-
-        Parameters
-        ----------
-        distance: np.array shape n-d array
-            a distance matrix of any shape
-
-        Returns
-        ---------
-        expanded_distance: shape (n+1)-d array
-            Expanded distance matrix with the last dimension of length
-            len(self.filter)
-        """
         return np.exp(
             -((distances[..., np.newaxis] - self.filter) ** 2) / (self.var**2)
         )
 
 
 class AtomInitializer(object):
-    """
-    Base class for initializing the vector representation for atoms.
-
-    !!! Use one AtomInitializer per dataset !!!
-    """
-
     def __init__(self, atom_types):
         self.atom_types = set(atom_types)
         self._embedding = {}
@@ -219,17 +183,6 @@ class AtomInitializer(object):
 
 
 class AtomCustomJSONInitializer(AtomInitializer):
-    """
-    Initialize atom feature vectors using a JSON file, which is a python dictionary mapping
-    from element number to a list representing the feature vector of the element
-
-    Parameters
-    ----------
-
-    elem_embedding_file: str
-        the path to the .json file
-    """
-
     def __init__(self, elem_embedding_file):
         with open(elem_embedding_file) as f:
             elem_embedding = json.load(f)
@@ -241,52 +194,6 @@ class AtomCustomJSONInitializer(AtomInitializer):
 
 
 class CIFData(Dataset):
-    """
-    The CIFData dataset is a wrapper for a dataset where the crystal
-    structures are stored in the form of CIF files. The dataset should have the following
-    directory structure:
-
-    root_dir
-    ├── id_prop.csv
-    ├── atom_init.json
-    ├── id0.cif
-    ├── id1.cif
-    ├── ...
-
-    id_prop.csv: a CSV file with two columns. The first column recodes a
-    unique ID for each crystal, and the second column recodes the value of
-    target property.
-
-    atom_init.json: a JSON file that stores the initialization vector for each
-    element.
-
-    ID.cif: a CIF file that recodes the crystal structure, where ID is the
-    unique ID for the crystal.
-
-    Parameters
-    ----------
-
-    root_dir: str
-        The path to the root directory of the dataset
-    max_num_nbr: int
-        The maximum number of neighbors while constructing the crystal
-    redius: float
-        The cufoff radius for searchiing neighbors
-    dmin: float
-        The minimum distance for constructing GaussianDistance
-    step: float
-        The step size for constructing GaussianDistance
-
-    Returns
-    ---------
-
-    atom_fea: torch.Tensor shape (n_i, orig_atom_fea_len)
-    nbr_fea: torch.Tensor shape (n_i, M, nbr_fea_len)
-    nbr_fea_idx: torch.LongTensor shape (n_i, M)
-    target: torch.Tensor shape (1, )
-    cif_id: str or int
-    """
-
     def __init__(self, root_dir, max_num_nbr=12, radius=8, dmin=0, step=0.2):
         self.root_dir = root_dir
         self.max_num_nbr, self.radius = max_num_nbr, radius
@@ -298,8 +205,20 @@ class CIFData(Dataset):
             self.id_prop_data = [row for row in reader]
         atom_init_file = os.path.join(self.root_dir, "atom_init.json")
         assert os.path.exists(atom_init_file), "atom_init.json does not exist!"
+        self.step = step
+        self.dmin = dmin
         self.ari = AtomCustomJSONInitializer(atom_init_file)
-        self.gdf = GaussianDistance(dmin=dmin, dmax=self.radius, step=step)
+        self.gdf = GaussianDistance(dmin=self.dmin, dmax=self.radius, step=self.step)
+        self.record_all_path = os.path.join(self.root_dir, "record_all_path.json")
+        with open(self.record_all_path, "r") as f:
+            record_hash = str(f'P_{self.max_num_nbr}_{self.radius}_{dmin}_{self.step}')
+            self.record_path = os.path.join(self.root_dir, record_hash)
+            record_all_path = json.load(f)
+            if not record_hash in record_all_path.keys():
+                record_all_path[record_hash] = {"type" : "Predict", "max_num_nbr" : self.max_num_nbr, "radius" : self.radius, "dmin" : self.dmin, "step" : self.step}
+                os.makedirs(self.record_path)
+        with open(self.record_all_path, "w") as f:
+            f.write(json.dumps(record_all_path, indent=1))
 
     def __len__(self):
         return len(self.id_prop_data)
@@ -307,33 +226,40 @@ class CIFData(Dataset):
     @functools.lru_cache(maxsize=None)  # Cache Loaded structures
     def __getitem__(self, idx):
         cif_id, target = copy.deepcopy(self.id_prop_data[idx])
-        crystal = Structure.from_file(os.path.join(self.root_dir, cif_id + ".cif"))
-        atom_fea = np.vstack(
-            [
-                self.ari.get_atom_fea(crystal[i].specie.number)
-                for i in range(len(crystal))
-            ]
-        )
-        all_nbrs = crystal.get_all_neighbors(self.radius, include_index=True)
-        all_nbrs = [sorted(nbrs, key=lambda x: x[1]) for nbrs in all_nbrs]
-        nbr_fea_idx, nbr_fea = [], []
-        for nbr in all_nbrs:
-            if len(nbr) < self.max_num_nbr:
-                nbr_fea_idx.append(
-                    list(map(lambda x: x[2], nbr)) + [0] * (self.max_num_nbr - len(nbr))
-                )
-                nbr_fea.append(
-                    list(map(lambda x: x[1], nbr))
-                    + [self.radius + 1.0] * (self.max_num_nbr - len(nbr))
-                )
-            else:
-                nbr_fea_idx.append(list(map(lambda x: x[2], nbr[: self.max_num_nbr])))
-                nbr_fea.append(list(map(lambda x: x[1], nbr[: self.max_num_nbr])))
-        nbr_fea_idx, nbr_fea = np.array(nbr_fea_idx), np.array(nbr_fea)
-        nbr_fea = self.gdf.expand(nbr_fea)
-
-        atom_fea = torch.Tensor(atom_fea)
-        nbr_fea = torch.Tensor(nbr_fea)
-        nbr_fea_idx = torch.LongTensor(nbr_fea_idx)
-        target = torch.Tensor([float(target)])
+        if os.path.exists(os.path.join(self.record_path, cif_id)):
+            data = torch.load(os.path.join(self.record_path, cif_id))
+            atom_fea = data['atom_fea']
+            nbr_fea = data['nbr_fea']
+            nbr_fea_idx = data['nbr_fea_idx']
+            target = data['target']
+        else:
+            crystal = Structure.from_file(os.path.join(self.root_dir, cif_id + ".cif"))
+            atom_fea = np.vstack(
+                [
+                    self.ari.get_atom_fea(crystal[i].specie.number)
+                    for i in range(len(crystal))
+                ]
+            )
+            all_nbrs = crystal.get_all_neighbors(self.radius, include_index=True)
+            all_nbrs = [sorted(nbrs, key=lambda x: x[1]) for nbrs in all_nbrs]
+            nbr_fea_idx, nbr_fea = [], []
+            for nbr in all_nbrs:
+                if len(nbr) < self.max_num_nbr:
+                    nbr_fea_idx.append(
+                        list(map(lambda x: x[2], nbr)) + [0] * (self.max_num_nbr - len(nbr))
+                    )
+                    nbr_fea.append(
+                        list(map(lambda x: x[1], nbr))
+                        + [self.radius + 1.0] * (self.max_num_nbr - len(nbr))
+                    )
+                else:
+                    nbr_fea_idx.append(list(map(lambda x: x[2], nbr[: self.max_num_nbr])))
+                    nbr_fea.append(list(map(lambda x: x[1], nbr[: self.max_num_nbr])))
+            nbr_fea_idx, nbr_fea = np.array(nbr_fea_idx), np.array(nbr_fea)
+            nbr_fea = self.gdf.expand(nbr_fea)
+            atom_fea = torch.Tensor(atom_fea)
+            nbr_fea = torch.Tensor(nbr_fea)
+            nbr_fea_idx = torch.LongTensor(nbr_fea_idx)
+            target = torch.Tensor([float(target)])
+            torch.save({'atom_fea':atom_fea, 'nbr_fea':nbr_fea, 'nbr_fea_idx':nbr_fea_idx, 'target':target}, os.path.join(self.record_path, cif_id))
         return (atom_fea, nbr_fea, nbr_fea_idx), target, cif_id
