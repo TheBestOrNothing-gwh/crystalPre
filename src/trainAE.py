@@ -147,7 +147,7 @@ def main():
     args = args_parse()
     # region 检查参数是否合法
     assert (
-        args.global_local_split[0] + args.global_local_split[1] == 1
+        abs(args.global_local_split[0] + args.global_local_split[1] - 1) <= 1e-5
     ), "global + local == 1"
     # endregion
     # region 设置时间

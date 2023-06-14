@@ -135,7 +135,7 @@ def args_parse():
         "--pin_memory", type=bool, default=True, help="Set the pin_memory"
     )
     parser.add_argument(
-        "--split", type=float, nargs='+', default=[0.8, 0.1, 0.1], help="Split the dataset"
+        "--split", type=float, nargs='+', default=[0.6, 0.3, 0.1], help="Split the dataset"
     )
     # endregion
     # region 模型配置
@@ -231,7 +231,7 @@ def args_parse():
 def main():
     args = args_parse()
     assert (
-        args.split[0] + args.split[1] + args.split[2] == 1
+        abs(args.split[0] + args.split[1] + args.split[2] - 1) <= 1e-5
     ), "train + val + test == 1"
     # region 设置时间
     eastern = pytz.timezone(args.timezone)
@@ -287,8 +287,7 @@ def main():
         atom_fea_len=args.atom_fea_len,
         n_conv=args.n_conv,
         h_fea_len=args.h_fea_len,
-        n_h=args.n_h,
-        classification=False,
+        n_h=args.n_h
     )
     model.to(device)
     # endregion
@@ -339,7 +338,17 @@ def main():
             f"Epoch Summary : Epoch : {epoch} Train Mean Loss : {train_loss} Train MAE : {train_mae} Val Mean Loss : {val_loss} Val MAE : {val_mae} Best Val MAE : {best_mae_error}\n"
         )
     # endregion
-    test_mae = test(test_loader, model, normalizer, device)
+    best_model = model = CrystalGraphConvNet(
+        orig_atom_fea_len,
+        nbr_fea_len,
+        atom_fea_len=args.atom_fea_len,
+        n_conv=args.n_conv,
+        h_fea_len=args.h_fea_len,
+        n_h=args.n_h
+    )
+    best_model.load_state_dict(torch.load(os.path.join(path, "models", "best_model.pth")))
+    best_model.to(device)
+    test_mae = test(test_loader,best_model, normalizer, device)
     out.writelines(f"Test MAE : {test_mae}\n")
 
 
