@@ -112,18 +112,16 @@ class CrystalGraphConvNet(nn.Module):
             Number of hidden layers after pooling
         """
         super(CrystalGraphConvNet, self).__init__()
-        # Feature Selector
-        self.mask = nn.Parameter(torch.ones(orig_atom_fea_len), requires_grad=True)
         self.classification = classification
-        self.embedding = nn.Linear(orig_atom_fea_len, atom_fea_len)
+        self.embedding = nn.Linear(orig_atom_fea_len, atom_fea_len, bias=False)
         self.convs = nn.ModuleList(
             [
                 ConvLayer(atom_fea_len=atom_fea_len, nbr_fea_len=nbr_fea_len)
                 for _ in range(n_conv)
             ]
         )
-        self.conv_to_fc = nn.Linear(atom_fea_len, h_fea_len)
-        self.conv_to_fc_softplus = nn.Softplus()
+        self.fc0 = nn.Linear(atom_fea_len, h_fea_len)
+        self.softplus0 = nn.Softplus()
         if n_h > 1:
             self.fcs = nn.ModuleList(
                 [nn.Linear(h_fea_len, h_fea_len) for _ in range(n_h - 1)]
@@ -158,13 +156,12 @@ class CrystalGraphConvNet(nn.Module):
         """
         # 嵌入，卷积
         atom_fea = self.embedding(atom_fea)
-        for conv_func in self.convs:
-            atom_fea = conv_func(atom_fea, nbr_fea, nbr_fea_idx)
+        for conv in self.convs:
+            atom_fea = conv(atom_fea, nbr_fea, nbr_fea_idx)
         # 池化
         crys_fea = self.pooling(atom_fea, crystal_atom_idx)
         # 输出
-        crys_fea = self.conv_to_fc(self.conv_to_fc_softplus(crys_fea))
-        crys_fea = self.conv_to_fc_softplus(crys_fea)
+        crys_fea = self.softplus0(self.fc0(self.softplus0(crys_fea)))
         if self.classification:
             crys_fea = self.dropout(crys_fea)
         if hasattr(self, "fcs") and hasattr(self, "softpluses"):
@@ -223,11 +220,10 @@ class CrystalAE(nn.Module):
     def forward(self, atom_fea, nbr_fea, nbr_fea_idx, crystal_atom_idx):
         # Encoder part
         atom_fea = self.embedding(atom_fea)
-        for conv_func in self.convs:
-            atom_fea = conv_func(atom_fea, nbr_fea, nbr_fea_idx)
-
+        for conv in self.convs:
+            atom_fea = conv(atom_fea, nbr_fea, nbr_fea_idx)
+        # Pooling
         bt_atom_fea = [atom_fea[idx_map] for idx_map in crystal_atom_idx]
-
         # Decoder part
         """
         Architecture: Node emb is N*64. We decode it back to adjacency tensor N*N*4.
@@ -237,25 +233,19 @@ class CrystalAE(nn.Module):
         2nd vector = 1 -> 3/4 Edges
         3rd vector = 1 -> more than 5 Edges
         """
-        edge_prob_list = []
+        adj_list = []
         atom_feature_list = []
         for atom_fea in bt_atom_fea:
+            # adj reconst
             N, dim = atom_fea.shape
-
-            # Repeat feature N times : (N, N, dim)
             atom_nbr_fea = atom_fea.repeat(N, 1, 1)
             atom_nbr_fea = atom_nbr_fea.contiguous().view(-1, dim)
-
-            # Expand N times : (N, N, dim)
             atom_adj_fea = torch.unsqueeze(atom_fea, 1).expand(N, N, dim)
             atom_adj_fea = atom_nbr_fea.contiguous().view(-1, dim)
-
-            # Bilinear Layer : Adjacency List Reconsruction
-            edge_p = self.fc_adj(atom_adj_fea, atom_nbr_fea)
-            edge_p = self.fc1(edge_p)
-            edge_p = self.logsoftmax(edge_p)
-            edge_prob_list.append(edge_p)
-
+            adj_p = self.fc_adj(atom_adj_fea, atom_nbr_fea)
+            adj_p = self.fc1(adj_p)
+            adj_p = self.logsoftmax(adj_p)
+            adj_list.append(adj_p)
             # Atom Feature Reconstruction
             atom_feature_list.append(self.fc_atom_feature(atom_fea))
-        return edge_prob_list, atom_feature_list
+        return adj_list, atom_feature_list

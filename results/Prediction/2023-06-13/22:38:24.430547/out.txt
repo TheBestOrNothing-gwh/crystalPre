@@ -1,5 +1,0 @@
-Pretrained Model Path None
-Data path : /home/gwh/project/crystalProject/DATA/data
-Learning Rate : 0.01
-Epochs 300
-Batch size 32

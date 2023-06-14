@@ -37,14 +37,14 @@ def train(loader, model, optimizer, device, split):
         )
         output_var = [adj.to(device) for adj in adjs]
         # compute output
-        edge_prob_list, atom_feature_list = model(*input_var)
+        adj_list, atom_feature_list = model(*input_var)
         # 计算loss
         loss = 0  # 总loss
         loss_adj = 0  # 全局loss
         loss_atom_fea = 0  # 局部loss
-        for j in range(len(edge_prob_list)):
+        for j in range(len(adj_list)):
             # Loss for Global Connectivity Reconstruction
-            adj_p = edge_prob_list[j]
+            adj_p = adj_list[j]
             adj_o = output_var[j]
             loss_adj_reconst = F.nll_loss(adj_p, adj_o, weight=pos_weight)
             loss_adj = loss_adj + loss_adj_reconst
@@ -57,10 +57,10 @@ def train(loader, model, optimizer, device, split):
             )
             loss_atom_fea = loss_atom_fea + loss_atom_fea_reconst
             loss = loss + split[1] * loss_atom_fea_reconst
-        total_losses.update(loss / len(edge_prob_list), len(edge_prob_list))
-        adj_reconst_losses.update(loss_adj / len(edge_prob_list), len(edge_prob_list))
+        total_losses.update(loss / len(adj_list), len(adj_list))
+        adj_reconst_losses.update(loss_adj / len(adj_list), len(adj_list))
         feature_reconst_losses.update(
-            loss_atom_fea / len(edge_prob_list), len(edge_prob_list)
+            loss_atom_fea / len(adj_list), len(adj_list)
         )
         # 反向传播
         optimizer.zero_grad()
@@ -131,7 +131,7 @@ def args_parse():
         help="Set the Weight_Decay, L2regular",
     )
     parser.add_argument(
-        "--global_local_split", type=list, default=[0.9, 0.1], help="global:local"
+        "--global_local_split", type=float, nargs='+', default=[0.9, 0.1], help="global:local"
     )
     # endregion
     # region 其他参数

@@ -9,14 +9,12 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import MultiStepLR
 from data_prop import *
-from model import CrystalGraphConvNet
+from model import *
 from tools import *
 
 
 def train(train_loader, model, criterion, optimizer, normalizer, device):
-    # 均方误差，用作损失函数
     losses = AverageMeter()
-    # 平均绝对误差，用作性能参考
     mae_errors = AverageMeter()
 
     # switch to train mode
@@ -52,15 +50,13 @@ def train(train_loader, model, criterion, optimizer, normalizer, device):
 
 
 def validate(val_loader, model, criterion, normalizer, device):
-    # 均方误差，用作损失函数
     losses = AverageMeter()
-    # 平均绝对误差，用作性能参考
     mae_errors = AverageMeter()
 
     # switch to evaluate mode
     model.eval()
     with torch.no_grad():
-        for i, (input, target, _) in enumerate(val_loader):
+        for _, (input, target, _) in enumerate(val_loader):
             # 加载数据到指定空间上
             atom_fea, nbr_fea, nbr_fea_idx, crys_atom_idx = (
                 input[0],
@@ -86,13 +82,13 @@ def validate(val_loader, model, criterion, normalizer, device):
     return losses.avg, mae_errors.avg
 
 
-def test(test_loader, model, criterion, normalizer, device):
+def test(test_loader, model, normalizer, device):
     mae_errors = AverageMeter()
 
     # switch to evaluate mode
     model.eval()
     with torch.no_grad():
-        for i, (input, target, _) in enumerate(test_loader):
+        for _, (input, target, _) in enumerate(test_loader):
             # 加载数据到指定空间上
             atom_fea, nbr_fea, nbr_fea_idx, crys_atom_idx = (
                 input[0],
@@ -139,7 +135,7 @@ def args_parse():
         "--pin_memory", type=bool, default=True, help="Set the pin_memory"
     )
     parser.add_argument(
-        "--split", type=list, default=[0.6, 0.3, 0.1], help="Split the dataset"
+        "--split", type=float, nargs='+', default=[0.8, 0.1, 0.1], help="Split the dataset"
     )
     # endregion
     # region 模型配置
@@ -213,16 +209,10 @@ def args_parse():
     # endregion
     # region 其他参数
     parser.add_argument(
-        "--pretrained_model",
+        "--pretrained_path",
         type=str,
         default=None,
         help="Path of the Pretrained CrysAE Model Path",
-    )
-    parser.add_argument(
-        "--feature_selector",
-        type=bool,
-        default=True,
-        help="Option for feature selector",
     )
     parser.add_argument(
         "--timezone", type=str, default="Asia/Shanghai", help="Set the timezone"
@@ -240,6 +230,9 @@ def args_parse():
 
 def main():
     args = args_parse()
+    assert (
+        args.split[0] + args.split[1] + args.split[2] == 1
+    ), "train + val + test == 1"
     # region 设置时间
     eastern = pytz.timezone(args.timezone)
     current_time = datetime.datetime.now().astimezone(eastern).time()
@@ -257,7 +250,7 @@ def main():
     # endregion
     # region 初始的日志信息
     out = open(os.path.join(path, "out.txt"), "w")
-    out.writelines("Pretrained Model Path " + str(args.pretrained_model) + "\n")
+    out.writelines("Pretrained Model Path " + str(args.pretrained_path) + "\n")
     out.writelines("Data path : " + str(args.data_path) + "\n")
     out.writelines("Learning Rate : " + str(args.lr) + "\n")
     out.writelines("Epochs " + str(args.epochs) + "\n")
@@ -300,32 +293,9 @@ def main():
     model.to(device)
     # endregion
     # region 导入预训练AE来初始化模型
-    pretrained_path = args.pretrained_model
-    if pretrained_path != None:
-        model_name = pretrained_path
-        # if args.cuda:
-        #     ae_model = torch.load(model_name)
-        # else:
-        #     ae_model = torch.load(model_name, map_location=torch.device('cpu'))
-        ae_model = torch.load(model_name).to(device)
-        # Transfer Weights from Encoder of AutoEnc
-        model_dict = ae_model.state_dict()
-        model_dict.pop("embedding.weight")
-        model_dict.pop("fc_adj.weight")
-        model_dict.pop("fc_adj.bias")
-        # model_dict.pop('fc_edge.weight')
-        # model_dict.pop('fc_edge.bias')
-        model_dict.pop("fc_atom_feature.weight")
-        model_dict.pop("fc_atom_feature.bias")
-        model_dict.pop("fc1.weight")
-        model_dict.pop("fc1.bias")
-        # model_dict.pop('fc2.weight')
-        # model_dict.pop('fc2.bias')
-        pmodel_dict = model.state_dict()
-        pmodel_dict.update(model_dict)
-        model.load_state_dict(pmodel_dict)
-    else:
-        print("No Pretrained Model.Property Predictor will be trained from Scratch!!")
+    if args.pretrained_path != None:
+        model.load_state_dict(torch.load(args.pretrained_path, map_location=device), strict=False)
+        print("Loaded pretrained model!!!")
     # endregion
     # region 定义损失函数和优化器
     criterion = nn.MSELoss()
@@ -369,7 +339,7 @@ def main():
             f"Epoch Summary : Epoch : {epoch} Train Mean Loss : {train_loss} Train MAE : {train_mae} Val Mean Loss : {val_loss} Val MAE : {val_mae} Best Val MAE : {best_mae_error}\n"
         )
     # endregion
-    test_mae = test(test_loader, model, criterion, normalizer, device)
+    test_mae = test(test_loader, model, normalizer, device)
     out.writelines(f"Test MAE : {test_mae}\n")
 
 
