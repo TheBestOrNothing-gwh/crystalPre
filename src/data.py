@@ -9,6 +9,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.dataloader import default_collate
 from torch.utils.data.sampler import SubsetRandomSampler
+from prefetch_generator import BackgroundGenerator
 
 
 def get_data_loader(
@@ -20,7 +21,7 @@ def get_data_loader(
     pin_memory=False,
 ):
     train_sampler = SubsetRandomSampler(list(range(data_size)))
-    data_loader = DataLoader(
+    data_loader = DataLoaderX(
         dataset,
         batch_size=batch_size,
         sampler=train_sampler,
@@ -41,7 +42,7 @@ def collate_pool(dataset_list):
         batch_cif_ids,
     ) = ([], [], [], [], [], [])
     base_idx = 0
-    for i, ((atom_fea, nbr_fea, nbr_fea_idx), adj, cif_id) in enumerate(dataset_list):
+    for _, ((atom_fea, nbr_fea, nbr_fea_idx), adj, cif_id) in enumerate(dataset_list):
         n_i = atom_fea.shape[0]  # number of atoms for this crystal
         batch_atom_fea.append(atom_fea)
         batch_nbr_fea.append(nbr_fea)
@@ -86,6 +87,12 @@ def disc_edge_feature(edge, data):
             else:
                 edge_tensor[i][edge_idx][edge_dist - 1] = 1
     return edge_tensor
+
+
+class DataLoaderX(DataLoader):
+    def __iter__(self):
+        return BackgroundGenerator(super().__iter__())
+
 
 
 class GaussianDistance(object):
@@ -144,18 +151,13 @@ class AtomCustomJSONInitializer(AtomInitializer):
 class CIFData(Dataset):
     def __init__(self, root_dir, max_num_nbr, radius, dmin=0, step=0.2):
         self.root_dir = root_dir
-        self.max_num_nbr, self.radius = max_num_nbr, radius
-        assert os.path.exists(root_dir), "root_dir does not exist!"
+        self.max_num_nbr, self.radius, self.dmin, self.step = max_num_nbr, radius, dmin, step
         id_prop_file = os.path.join(self.root_dir, "id_prop.csv")
-        assert os.path.exists(id_prop_file), "id_prop.csv does not exist!"
         with open(id_prop_file) as f:
             reader = csv.reader(f)
             # headings = next(reader)
             self.id_prop_data = [row for row in reader]
         atom_init_file = os.path.join(self.root_dir, "atom_init.json")
-        assert os.path.exists(atom_init_file), "atom_init.json does not exist!"
-        self.step = step
-        self.dmin = dmin
         self.ari = AtomCustomJSONInitializer(atom_init_file)
         self.gdf = GaussianDistance(dmin=self.dmin, dmax=self.radius, step=self.step)
         self.record_all_path = os.path.join(self.root_dir, "record_all_path.json")

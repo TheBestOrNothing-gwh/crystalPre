@@ -269,7 +269,7 @@ def main():
     # 选择2000个样本用来估计均值、方差
     target_list = []
     count = 0
-    for _, (_, target, _) in tqdm(enumerate(train_loader)):
+    for _, (_, target, _) in enumerate(train_loader):
         count += 1
         if count > args.sample:
             break

@@ -10,6 +10,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.dataloader import default_collate
 from torch.utils.data.sampler import SubsetRandomSampler
+from prefetch_generator import BackgroundGenerator
 
 
 def get_train_val_test_loader(
@@ -53,7 +54,7 @@ def get_train_val_test_loader(
     val_sampler = SubsetRandomSampler(val_indices)
     test_sampler = SubsetRandomSampler(test_indices)
 
-    train_loader = DataLoader(
+    train_loader = DataLoaderX(
         dataset,
         batch_size=batch_size,
         sampler=train_sampler,
@@ -61,7 +62,7 @@ def get_train_val_test_loader(
         num_workers=num_workers,
         pin_memory=pin_memory,
     )
-    val_loader = DataLoader(
+    val_loader = DataLoaderX(
         dataset,
         batch_size=batch_size,
         sampler=val_sampler,
@@ -69,7 +70,7 @@ def get_train_val_test_loader(
         num_workers=num_workers,
         pin_memory=pin_memory,
     )
-    test_loader = DataLoader(
+    test_loader = DataLoaderX(
         dataset,
         batch_size=batch_size,
         sampler=test_sampler,
@@ -116,7 +117,7 @@ def collate_pool(dataset_list):
         batch_cif_id,
     ) = ([], [], [], [], [], [])
     base_idx = 0
-    for i, ((atom_fea, nbr_fea, nbr_fea_idx), target, cif_id) in enumerate(
+    for _, ((atom_fea, nbr_fea, nbr_fea_idx), target, cif_id) in enumerate(
         dataset_list
     ):
         n_i = atom_fea.shape[0]
@@ -139,6 +140,11 @@ def collate_pool(dataset_list):
         batch_cif_id,
     )
 
+
+class DataLoaderX(DataLoader):
+    def __iter__(self):
+        return BackgroundGenerator(super().__iter__())
+    
 
 class GaussianDistance(object):
     def __init__(self, dmin, dmax, step, var=None):
@@ -196,17 +202,12 @@ class AtomCustomJSONInitializer(AtomInitializer):
 class CIFData(Dataset):
     def __init__(self, root_dir, max_num_nbr=12, radius=8, dmin=0, step=0.2):
         self.root_dir = root_dir
-        self.max_num_nbr, self.radius = max_num_nbr, radius
-        assert os.path.exists(root_dir), "root_dir does not exist!"
+        self.max_num_nbr, self.radius, self.dmin, self.step = max_num_nbr, radius, dmin, step
         id_prop_file = os.path.join(self.root_dir, "id_prop.csv")
-        assert os.path.exists(id_prop_file), "id_prop.csv does not exist!"
         with open(id_prop_file) as f:
             reader = csv.reader(f)
             self.id_prop_data = [row for row in reader]
         atom_init_file = os.path.join(self.root_dir, "atom_init.json")
-        assert os.path.exists(atom_init_file), "atom_init.json does not exist!"
-        self.step = step
-        self.dmin = dmin
         self.ari = AtomCustomJSONInitializer(atom_init_file)
         self.gdf = GaussianDistance(dmin=self.dmin, dmax=self.radius, step=self.step)
         self.record_all_path = os.path.join(self.root_dir, "record_all_path.json")
