@@ -21,7 +21,7 @@ def train(loader, model, optimizer, device, split):
     # 批训练
     pos_weight = torch.Tensor([0.1, 1, 1, 1, 1, 1]).to(device)
     model.train()
-    for _, (input, adjs, _) in enumerate(loader):
+    for _, (input, adj, _) in enumerate(loader):
         atom_fea, nbr_fea, nbr_fea_idx, crys_atom_idx = (
             input[0],
             input[1],
@@ -35,33 +35,20 @@ def train(loader, model, optimizer, device, split):
             nbr_fea_idx.to(device),
             [crys_idx.to(device) for crys_idx in crys_atom_idx],
         )
-        output_var = [adj.to(device) for adj in adjs]
+        output_var = adj.to(device)
         # compute output
-        adj_list, atom_feature_list = model(*input_var)
+        adj, atom_fea = model(*input_var)
         # 计算loss
-        loss = 0  # 总loss
-        loss_adj = 0  # 全局loss
-        loss_atom_fea = 0  # 局部loss
-        for j in range(len(adj_list)):
-            # Loss for Global Connectivity Reconstruction
-            adj_p = adj_list[j]
-            adj_o = output_var[j]
-            loss_adj_reconst = F.nll_loss(adj_p, adj_o, weight=pos_weight)
-            loss_adj = loss_adj + loss_adj_reconst
-            loss = loss + split[0] * loss_adj_reconst
-            # Loss for Local Atom Feature Reconstruction
-            atom_fea_p = atom_feature_list[j]
-            atom_fea_o = input_var[0][crys_atom_idx[j]]
-            loss_atom_fea_reconst = F.binary_cross_entropy_with_logits(
-                atom_fea_p, atom_fea_o
+        loss_adj = F.nll_loss(adj, output_var, weight=pos_weight)
+        loss_atom_fea = F.binary_cross_entropy_with_logits(
+                atom_fea, input_var[0]
             )
-            loss_atom_fea = loss_atom_fea + loss_atom_fea_reconst
-            loss = loss + split[1] * loss_atom_fea_reconst
-        total_losses.update(loss / len(adj_list), len(adj_list))
-        adj_reconst_losses.update(loss_adj / len(adj_list), len(adj_list))
+        loss = loss_adj * split[0] + loss_atom_fea * split[1]
+        adj_reconst_losses.update(loss_adj, len(input_var[3]))
         feature_reconst_losses.update(
-            loss_atom_fea / len(adj_list), len(adj_list)
+            loss_atom_fea, len(input_var[3])
         )
+        total_losses.update(loss, len(input_var[3]))
         # 反向传播
         optimizer.zero_grad()
         loss.backward()
@@ -152,8 +139,8 @@ def main():
     # endregion
     # region 设置时间
     eastern = pytz.timezone(args.timezone)
-    current_time = datetime.datetime.now().astimezone(eastern).time()
     current_date = datetime.datetime.now().astimezone(eastern).date()
+    current_time = datetime.datetime.now().astimezone(eastern).time()
     # endregion
     # region 设置机器
     device = torch.device(args.device)

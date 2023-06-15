@@ -59,7 +59,7 @@ def collate_pool(dataset_list):
             torch.cat(batch_nbr_fea_idx, dim=0),
             crystal_atom_idx,
         ),
-        batch_adj,
+        torch.cat(batch_adj, dim=0),
         batch_cif_ids,
     )
 
@@ -162,11 +162,11 @@ class CIFData(Dataset):
         self.gdf = GaussianDistance(dmin=self.dmin, dmax=self.radius, step=self.step)
         self.record_all_path = os.path.join(self.root_dir, "record_all_path.json")
         with open(self.record_all_path, "r") as f:
-            record_hash = str(f'VE_{self.max_num_nbr}_{self.radius}_{dmin}_{self.step}')
+            record_hash = str(f'AE_{self.max_num_nbr}_{self.radius}_{dmin}_{self.step}')
             self.record_path = os.path.join(self.root_dir, record_hash)
             record_all_path = json.load(f)
             if not record_hash in record_all_path.keys():
-                record_all_path[record_hash] = {"type" : "VE", "max_num_nbr" : self.max_num_nbr, "radius" : self.radius, "dmin" : self.dmin, "step" : self.step}
+                record_all_path[record_hash] = {"type" : "AE", "max_num_nbr" : self.max_num_nbr, "radius" : self.radius, "dmin" : self.dmin, "step" : self.step}
                 os.makedirs(self.record_path)
         with open(self.record_all_path, "w") as f:
             f.write(json.dumps(record_all_path, indent=1))

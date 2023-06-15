@@ -222,8 +222,6 @@ class CrystalAE(nn.Module):
         atom_fea = self.embedding(atom_fea)
         for conv in self.convs:
             atom_fea = conv(atom_fea, nbr_fea, nbr_fea_idx)
-        # Pooling
-        bt_atom_fea = [atom_fea[idx_map] for idx_map in crystal_atom_idx]
         # Decoder part
         """
         Architecture: Node emb is N*64. We decode it back to adjacency tensor N*N*4.
@@ -234,18 +232,13 @@ class CrystalAE(nn.Module):
         3rd vector = 1 -> more than 5 Edges
         """
         adj_list = []
-        atom_feature_list = []
-        for atom_fea in bt_atom_fea:
-            # adj reconst
-            N, dim = atom_fea.shape
-            atom_nbr_fea = atom_fea.repeat(N, 1, 1)
-            atom_nbr_fea = atom_nbr_fea.contiguous().view(-1, dim)
-            atom_adj_fea = torch.unsqueeze(atom_fea, 1).expand(N, N, dim)
-            atom_adj_fea = atom_nbr_fea.contiguous().view(-1, dim)
-            adj_p = self.fc_adj(atom_adj_fea, atom_nbr_fea)
-            adj_p = self.fc1(adj_p)
-            adj_p = self.logsoftmax(adj_p)
-            adj_list.append(adj_p)
-            # Atom Feature Reconstruction
-            atom_feature_list.append(self.fc_atom_feature(atom_fea))
-        return adj_list, atom_feature_list
+        for idx_map in crystal_atom_idx:
+            N, dim = atom_fea[idx_map].shape
+            adj = atom_fea[idx_map].repeat(N, 1, 1).contiguous().view(-1, dim)
+            adj_list.append(adj)
+        adj = torch.cat(adj_list, dim=0)
+        adj = self.fc_adj(adj, adj)
+        adj = self.fc1(adj)
+        adj = self.logsoftmax(adj)
+        atom_fea = self.fc_atom_feature(atom_fea)
+        return adj, atom_fea
