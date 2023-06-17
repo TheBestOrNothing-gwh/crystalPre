@@ -89,7 +89,18 @@ def args_parse():
     )
     # endregion
     # region 训练配置
-    parser.add_argument("--lr", type=float, default=0.003, help="Learning Rate")
+    parser.add_argument(
+        "--epochs", type=int, default=200, help="Number of Training Epoch"
+    )
+    parser.add_argument(
+        "--lr_milestones",
+        type=int,
+        default=[100],
+        nargs="+",
+        metavar="N",
+        help="milestones for scheduler (default: [100])",
+    )
+    parser.add_argument("--gamma", type=float, default=0.9, help="Set gamma")
     parser.add_argument(
         "--optim",
         type=str,
@@ -97,25 +108,15 @@ def args_parse():
         metavar="SGD",
         help="choose an optimizer, SGD or Adam, (default: SGD)",
     )
-    parser.add_argument(
-        "--epochs", type=int, default=200, help="Number of Training Epoch"
-    )
-    parser.add_argument(
-        "--lr_milestones",
-        default=[100],
-        nargs="+",
-        type=int,
-        metavar="N",
-        help="milestones for scheduler (default: [100])",
-    )
-    parser.add_argument(
-        "--momentum", default=0.9, type=float, metavar="M", help="momentum"
-    )
+    parser.add_argument("--lr", type=float, default=0.003, help="Learning Rate")
     parser.add_argument(
         "--weight_decay",
         type=float,
         default=0.0,
         help="Set the Weight_Decay, L2regular",
+    )
+    parser.add_argument(
+        "--momentum", default=0.9, type=float, metavar="M", help="momentum"
     )
     parser.add_argument(
         "--global_local_split", type=float, nargs='+', default=[0.9, 0.1], help="global:local"
@@ -154,12 +155,14 @@ def main():
     # endregion
     # region 初始的日志信息
     out = open(os.path.join(path, "out.txt"), "w")
+    out.writelines(f'data_path :{args.data_path}\n')
+    out.writelines(f'radius :{args.radius}\n')
+    out.writelines(f'max_num_nbr :{args.max_num_nbr}\n')
     out.writelines("***** Hyper-Parameters Details ********\n")
-    out.writelines("atom_fea_len :" + str(args.atom_fea_len) + "\n")
-    out.writelines("n_conv :" + str(args.n_conv) + "\n")
-    out.writelines("epochs :" + str(args.epochs) + "\n")
-    out.writelines("lr :" + str(args.lr) + "\n")
-    out.writelines("batch_size :" + str(args.batch_size) + "\n")
+    out.writelines(f'atom_fea_len :{args.atom_fea_len}\n')
+    out.writelines(f'n_conv :{args.n_conv}\n')
+    out.writelines(f'epochs :{args.epochs}\n')
+    out.writelines(f'batch_size :{args.batch_size}\n')
     # endregion
     # region 数据集
     full_dataset = CIFData(args.data_path, args.max_num_nbr, args.radius)
@@ -199,7 +202,7 @@ def main():
         optimizer = optim.Adam(
             model.parameters(), args.lr, weight_decay=args.weight_decay
         )
-    scheduler = MultiStepLR(optimizer, milestones=args.lr_milestones, gamma=0.1)
+    scheduler = MultiStepLR(optimizer, milestones=args.lr_milestones, gamma=args.gamma)
     # endregion
     # region Training Process
     # 训练相关变量

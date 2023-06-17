@@ -166,13 +166,6 @@ def args_parse():
     # endregion
     # region 训练配置
     parser.add_argument(
-        "--optim",
-        default="Adam",
-        type=str,
-        metavar="SGD",
-        help="choose an optimizer, SGD or Adam, (default: SGD)",
-    )
-    parser.add_argument(
         "--epochs",
         default=300,
         type=int,
@@ -180,31 +173,35 @@ def args_parse():
         help="number of total epochs to run (default: 30)",
     )
     parser.add_argument(
-        "--lr",
-        "--learning_rate",
-        default=0.01,
-        type=float,
-        metavar="LR",
-        help="initial learning rate (default: 0.01)",
-    )
-    parser.add_argument(
         "--lr_milestones",
-        default=[100],
+        default=[100, 100],
         nargs="+",
         type=int,
         metavar="N",
         help="milestones for scheduler (default: [100])",
     )
+    parser.add_argument("--gamma", type=float, default=0.9, help="Set gamma")
     parser.add_argument(
-        "--momentum", default=0.9, type=float, metavar="M", help="momentum"
+        "--optim",
+        default="Adam",
+        type=str,
+        metavar="SGD",
+        help="choose an optimizer, SGD or Adam, (default: SGD)",
+    )
+    parser.add_argument(
+        "--lr",
+        default=0.01,
+        type=float,
+        help="learning rate",
     )
     parser.add_argument(
         "--weight_decay",
-        "--wd",
         default=0,
         type=float,
-        metavar="W",
         help="weight decay (default: 0)",
+    )
+    parser.add_argument(
+        "--momentum", default=0.9, type=float, metavar="M", help="momentum"
     )
     # endregion
     # region 其他参数
@@ -250,11 +247,14 @@ def main():
     # endregion
     # region 初始的日志信息
     out = open(os.path.join(path, "out.txt"), "w")
-    out.writelines("Pretrained Model Path " + str(args.pretrained_path) + "\n")
-    out.writelines("Data path : " + str(args.data_path) + "\n")
-    out.writelines("Learning Rate : " + str(args.lr) + "\n")
-    out.writelines("Epochs " + str(args.epochs) + "\n")
-    out.writelines("Batch size " + str(args.batch_size) + "\n")
+    out.writelines(f'data_path :{args.data_path}\n')
+    out.writelines(f'radius :{args.radius}\n')
+    out.writelines(f'max_num_nbr :{args.max_num_nbr}\n')
+    out.writelines("***** Hyper-Parameters Details ********\n")
+    out.writelines(f'atom_fea_len :{args.atom_fea_len}\n')
+    out.writelines(f'n_conv :{args.n_conv}\n')
+    out.writelines(f'epochs :{args.epochs}\n')
+    out.writelines(f'batch_size :{args.batch_size}\n')
     # endregion
     # region 数据集
     dataset = CIFData(args.data_path, args.max_nbr, args.radius)
