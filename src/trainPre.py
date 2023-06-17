@@ -174,7 +174,7 @@ def args_parse():
     )
     parser.add_argument(
         "--lr_milestones",
-        default=[100, 100],
+        default=[100],
         nargs="+",
         type=int,
         metavar="N",
