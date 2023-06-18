@@ -124,7 +124,7 @@ def args_parse():
         "--radius", type=int, default=8, help="Radius of the sphere along an atom"
     )
     parser.add_argument(
-        "--max_nbr",
+        "--max_num_nbr",
         type=int,
         default=12,
         help="Maximum Number of neighbours to consider",
@@ -257,7 +257,7 @@ def main():
     out.writelines(f'batch_size :{args.batch_size}\n')
     # endregion
     # region 数据集
-    dataset = CIFData(args.data_path, args.max_nbr, args.radius)
+    dataset = CIFData(args.data_path, args.max_num_nbr, args.radius)
     train_loader, val_loader, test_loader = get_train_val_test_loader(
         dataset=dataset,
         split=args.split,
@@ -337,8 +337,10 @@ def main():
         out.writelines(
             f"Epoch Summary : Epoch : {epoch} Train Mean Loss : {train_loss} Train MAE : {train_mae} Val Mean Loss : {val_loss} Val MAE : {val_mae} Best Val MAE : {best_mae_error}\n"
         )
+    show(os.path.join(path, "loss.png"), args.epochs, {"train_loss":np.array(train_loss_list), "val_loss":np.array(val_loss_list)})
+    show(os.path.join(path, "mae.png"), args.epochs, {"train_mae":np.array(train_mae_list), "val_mae":np.array(val_mae_list)})
     # endregion
-    best_model = model = CrystalGraphConvNet(
+    best_model = CrystalGraphConvNet(
         orig_atom_fea_len,
         nbr_fea_len,
         atom_fea_len=args.atom_fea_len,

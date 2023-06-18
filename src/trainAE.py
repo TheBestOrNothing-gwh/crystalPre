@@ -227,11 +227,11 @@ def main():
         out.writelines(
             f"Epoch Summary : Epoch : {epoch} Total Loss : {total_loss} Adj Reconst Loss : {adj_reconst_loss} Feature Reconst Loss : {feature_reconst_loss}\n"
         )
+    show(os.path.join(path, "total_loss.png"), args.epochs, {"total_loss":np.array(total_loss_list)})
+    show(os.path.join(path, "adj_reconst_loss.png"), args.epochs, {"adj_reconst_loss":np.array(adj_reconst_loss_list)})
+    show(os.path.join(path, "feature_reconst_loss.png"), args.epochs, {"feature_reconst_loss":np.array(feature_reconst_loss_list)})
     # endregion
-    show(args.epochs, os.path.join(path, "total_loss.png"), "total_loss", total_loss_list)
-    show(args.epochs, os.path.join(path, "adj_reconst_loss.png"), "adj_reconst_loss", adj_reconst_loss_list)
-    show(args.epochs, os.path.join(path, "feature_reconst_loss.png"), "feature_reconst_loss", feature_reconst_loss_list)
-
+    
 
 if __name__ == "__main__":
     seed = 123

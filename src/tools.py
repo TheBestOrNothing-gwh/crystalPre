@@ -1,6 +1,7 @@
 import torch
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 import os
 
 
@@ -56,12 +57,15 @@ def save_models(epoch, model, is_best, path):
         torch.save(model.state_dict(), os.path.join(path, "best_model.pth"))
 
 
-def show(epochs, path, name, y):
-    x = list(range(1, epochs + 1))
-    df = pd.DataFrame({'epochs': x, name: y})
-    plt.figure(figsize=(16, 14))
-    plt.tight_layout()
-    plt.plot('epochs', name, data=df, marker='', color='blue', linewidth=10)
+def show(path, epochs, y):
+    _, ax = plt.subplots()
+    x = np.array(range(epochs))
+    for name, value in y.items():
+        ax.plot(x, value, label=name)
+    ax.set_xlabel('x label')
+    ax.set_ylabel('y label')
+    ax.set_title('learning curve')
+    ax.legend()
     plt.savefig(path)
 
 
