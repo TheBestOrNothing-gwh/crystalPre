@@ -94,7 +94,6 @@ class DataLoaderX(DataLoader):
         return BackgroundGenerator(super().__iter__())
 
 
-
 class GaussianDistance(object):
     def __init__(self, dmin, dmax, step, var=None):
         assert dmin < dmax
@@ -151,7 +150,12 @@ class AtomCustomJSONInitializer(AtomInitializer):
 class CIFData(Dataset):
     def __init__(self, root_dir, max_num_nbr, radius, dmin=0, step=0.2):
         self.root_dir = root_dir
-        self.max_num_nbr, self.radius, self.dmin, self.step = max_num_nbr, radius, dmin, step
+        self.max_num_nbr, self.radius, self.dmin, self.step = (
+            max_num_nbr,
+            radius,
+            dmin,
+            step,
+        )
         id_prop_file = os.path.join(self.root_dir, "id_prop.csv")
         with open(id_prop_file) as f:
             reader = csv.reader(f)
@@ -162,11 +166,17 @@ class CIFData(Dataset):
         self.gdf = GaussianDistance(dmin=self.dmin, dmax=self.radius, step=self.step)
         self.record_all_path = os.path.join(self.root_dir, "record_all_path.json")
         with open(self.record_all_path, "r") as f:
-            record_hash = str(f'AE_{self.max_num_nbr}_{self.radius}_{dmin}_{self.step}')
+            record_hash = str(f"AE_{self.max_num_nbr}_{self.radius}_{dmin}_{self.step}")
             self.record_path = os.path.join(self.root_dir, record_hash)
             record_all_path = json.load(f)
             if not record_hash in record_all_path.keys():
-                record_all_path[record_hash] = {"type" : "AE", "max_num_nbr" : self.max_num_nbr, "radius" : self.radius, "dmin" : self.dmin, "step" : self.step}
+                record_all_path[record_hash] = {
+                    "type": "AE",
+                    "max_num_nbr": self.max_num_nbr,
+                    "radius": self.radius,
+                    "dmin": self.dmin,
+                    "step": self.step,
+                }
                 os.makedirs(self.record_path)
         with open(self.record_all_path, "w") as f:
             f.write(json.dumps(record_all_path, indent=1))
@@ -179,10 +189,10 @@ class CIFData(Dataset):
         cif_id, _ = copy.deepcopy(self.id_prop_data[idx])
         if os.path.exists(os.path.join(self.record_path, cif_id)):
             data = torch.load(os.path.join(self.record_path, cif_id))
-            atom_fea = data['atom_fea']
-            nbr_fea = data['nbr_fea']
-            nbr_fea_idx = data['nbr_fea_idx']
-            adj = data['adj']
+            atom_fea = data["atom_fea"]
+            nbr_fea = data["nbr_fea"]
+            nbr_fea_idx = data["nbr_fea_idx"]
+            adj = data["adj"]
         else:
             crystal = Structure.from_file(os.path.join(self.root_dir, cif_id + ".cif"))
             atom_fea = np.vstack(
@@ -197,14 +207,17 @@ class CIFData(Dataset):
             for nbr in all_nbrs:
                 if len(nbr) < self.max_num_nbr:
                     nbr_fea_idx.append(
-                        list(map(lambda x: x[2], nbr)) + [0] * (self.max_num_nbr - len(nbr))
+                        list(map(lambda x: x[2], nbr))
+                        + [0] * (self.max_num_nbr - len(nbr))
                     )
                     nbr_fea.append(
                         list(map(lambda x: x[1], nbr))
                         + [self.radius + 1.0] * (self.max_num_nbr - len(nbr))
                     )
                 else:
-                    nbr_fea_idx.append(list(map(lambda x: x[2], nbr[: self.max_num_nbr])))
+                    nbr_fea_idx.append(
+                        list(map(lambda x: x[2], nbr[: self.max_num_nbr]))
+                    )
                     nbr_fea.append(list(map(lambda x: x[1], nbr[: self.max_num_nbr])))
             nbr_fea_idx, nbr_fea = np.array(nbr_fea_idx), np.array(nbr_fea)
             adj = get_molecular_adj(nbr_fea_idx, nbr_fea.shape[0])
@@ -214,5 +227,13 @@ class CIFData(Dataset):
             nbr_fea = torch.Tensor(nbr_fea)
             nbr_fea_idx = torch.LongTensor(nbr_fea_idx)
             adj = torch.LongTensor(adj)
-            torch.save({'atom_fea':atom_fea, 'nbr_fea':nbr_fea, 'nbr_fea_idx':nbr_fea_idx, 'adj':adj}, os.path.join(self.record_path, cif_id))
+            torch.save(
+                {
+                    "atom_fea": atom_fea,
+                    "nbr_fea": nbr_fea,
+                    "nbr_fea_idx": nbr_fea_idx,
+                    "adj": adj,
+                },
+                os.path.join(self.record_path, cif_id),
+            )
         return (atom_fea, nbr_fea, nbr_fea_idx), adj, cif_id

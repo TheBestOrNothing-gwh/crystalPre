@@ -49,11 +49,9 @@ def get_train_val_test_loader(
     test_indices = indices[
         int(total_size * split[0]) : int(total_size * (split[0] + split[1])) :
     ]
-
     train_sampler = SubsetRandomSampler(train_indices)
     val_sampler = SubsetRandomSampler(val_indices)
     test_sampler = SubsetRandomSampler(test_indices)
-
     train_loader = DataLoaderX(
         dataset,
         batch_size=batch_size,
@@ -78,7 +76,6 @@ def get_train_val_test_loader(
         num_workers=num_workers,
         pin_memory=pin_memory,
     )
-
     return train_loader, val_loader, test_loader
 
 
@@ -144,7 +141,7 @@ def collate_pool(dataset_list):
 class DataLoaderX(DataLoader):
     def __iter__(self):
         return BackgroundGenerator(super().__iter__())
-    
+
 
 class GaussianDistance(object):
     def __init__(self, dmin, dmax, step, var=None):
@@ -202,7 +199,12 @@ class AtomCustomJSONInitializer(AtomInitializer):
 class CIFData(Dataset):
     def __init__(self, root_dir, max_num_nbr=12, radius=8, dmin=0, step=0.2):
         self.root_dir = root_dir
-        self.max_num_nbr, self.radius, self.dmin, self.step = max_num_nbr, radius, dmin, step
+        self.max_num_nbr, self.radius, self.dmin, self.step = (
+            max_num_nbr,
+            radius,
+            dmin,
+            step,
+        )
         id_prop_file = os.path.join(self.root_dir, "id_prop.csv")
         with open(id_prop_file) as f:
             reader = csv.reader(f)
@@ -212,11 +214,17 @@ class CIFData(Dataset):
         self.gdf = GaussianDistance(dmin=self.dmin, dmax=self.radius, step=self.step)
         self.record_all_path = os.path.join(self.root_dir, "record_all_path.json")
         with open(self.record_all_path, "r") as f:
-            record_hash = str(f'P_{self.max_num_nbr}_{self.radius}_{dmin}_{self.step}')
+            record_hash = str(f"P_{self.max_num_nbr}_{self.radius}_{dmin}_{self.step}")
             self.record_path = os.path.join(self.root_dir, record_hash)
             record_all_path = json.load(f)
             if not record_hash in record_all_path.keys():
-                record_all_path[record_hash] = {"type" : "Predict", "max_num_nbr" : self.max_num_nbr, "radius" : self.radius, "dmin" : self.dmin, "step" : self.step}
+                record_all_path[record_hash] = {
+                    "type": "Predict",
+                    "max_num_nbr": self.max_num_nbr,
+                    "radius": self.radius,
+                    "dmin": self.dmin,
+                    "step": self.step,
+                }
                 os.makedirs(self.record_path)
         with open(self.record_all_path, "w") as f:
             f.write(json.dumps(record_all_path, indent=1))
@@ -229,10 +237,10 @@ class CIFData(Dataset):
         cif_id, target = copy.deepcopy(self.id_prop_data[idx])
         if os.path.exists(os.path.join(self.record_path, cif_id)):
             data = torch.load(os.path.join(self.record_path, cif_id))
-            atom_fea = data['atom_fea']
-            nbr_fea = data['nbr_fea']
-            nbr_fea_idx = data['nbr_fea_idx']
-            target = data['target']
+            atom_fea = data["atom_fea"]
+            nbr_fea = data["nbr_fea"]
+            nbr_fea_idx = data["nbr_fea_idx"]
+            target = data["target"]
         else:
             crystal = Structure.from_file(os.path.join(self.root_dir, cif_id + ".cif"))
             atom_fea = np.vstack(
@@ -247,14 +255,17 @@ class CIFData(Dataset):
             for nbr in all_nbrs:
                 if len(nbr) < self.max_num_nbr:
                     nbr_fea_idx.append(
-                        list(map(lambda x: x[2], nbr)) + [0] * (self.max_num_nbr - len(nbr))
+                        list(map(lambda x: x[2], nbr))
+                        + [0] * (self.max_num_nbr - len(nbr))
                     )
                     nbr_fea.append(
                         list(map(lambda x: x[1], nbr))
                         + [self.radius + 1.0] * (self.max_num_nbr - len(nbr))
                     )
                 else:
-                    nbr_fea_idx.append(list(map(lambda x: x[2], nbr[: self.max_num_nbr])))
+                    nbr_fea_idx.append(
+                        list(map(lambda x: x[2], nbr[: self.max_num_nbr]))
+                    )
                     nbr_fea.append(list(map(lambda x: x[1], nbr[: self.max_num_nbr])))
             nbr_fea_idx, nbr_fea = np.array(nbr_fea_idx), np.array(nbr_fea)
             nbr_fea = self.gdf.expand(nbr_fea)
@@ -262,5 +273,13 @@ class CIFData(Dataset):
             nbr_fea = torch.Tensor(nbr_fea)
             nbr_fea_idx = torch.LongTensor(nbr_fea_idx)
             target = torch.Tensor([float(target)])
-            torch.save({'atom_fea':atom_fea, 'nbr_fea':nbr_fea, 'nbr_fea_idx':nbr_fea_idx, 'target':target}, os.path.join(self.record_path, cif_id))
+            torch.save(
+                {
+                    "atom_fea": atom_fea,
+                    "nbr_fea": nbr_fea,
+                    "nbr_fea_idx": nbr_fea_idx,
+                    "target": target,
+                },
+                os.path.join(self.record_path, cif_id),
+            )
         return (atom_fea, nbr_fea, nbr_fea_idx), target, cif_id

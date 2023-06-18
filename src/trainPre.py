@@ -4,6 +4,7 @@ import pytz
 import datetime
 from tqdm import tqdm
 import numpy as np
+import random
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -135,7 +136,11 @@ def args_parse():
         "--pin_memory", type=bool, default=True, help="Set the pin_memory"
     )
     parser.add_argument(
-        "--split", type=float, nargs='+', default=[0.6, 0.3, 0.1], help="Split the dataset"
+        "--split",
+        type=float,
+        nargs="+",
+        default=[0.6, 0.3, 0.1],
+        help="Split the dataset",
     )
     # endregion
     # region 模型配置
@@ -220,6 +225,9 @@ def args_parse():
         default=1000,
         help="sample some batch to compute the normalize",
     )
+    parser.add_argument(
+        "--random_seed", type=int, default=123, help="Set the random seed"
+    )
     # endregion
     args = parser.parse_args()
     return args
@@ -230,10 +238,15 @@ def main():
     assert (
         abs(args.split[0] + args.split[1] + args.split[2] - 1) <= 1e-5
     ), "train + val + test == 1"
+    # region 设置随机数种子
+    random.seed(args.random_seed)
+    torch.manual_seed(args.random_seed)
+    np.random.seed(args.random_seed)
+    # endregion
     # region 设置时间
     eastern = pytz.timezone(args.timezone)
-    current_time = datetime.datetime.now().astimezone(eastern).time()
     current_date = datetime.datetime.now().astimezone(eastern).date()
+    current_time = datetime.datetime.now().astimezone(eastern).time()
     # endregion
     # region 设置机器
     device = torch.device(args.device)
@@ -247,14 +260,14 @@ def main():
     # endregion
     # region 初始的日志信息
     out = open(os.path.join(path, "out.txt"), "w")
-    out.writelines(f'data_path :{args.data_path}\n')
-    out.writelines(f'radius :{args.radius}\n')
-    out.writelines(f'max_num_nbr :{args.max_num_nbr}\n')
+    out.writelines(f"data_path :{args.data_path}\n")
+    out.writelines(f"radius :{args.radius}\n")
+    out.writelines(f"max_num_nbr :{args.max_num_nbr}\n")
     out.writelines("***** Hyper-Parameters Details ********\n")
-    out.writelines(f'atom_fea_len :{args.atom_fea_len}\n')
-    out.writelines(f'n_conv :{args.n_conv}\n')
-    out.writelines(f'epochs :{args.epochs}\n')
-    out.writelines(f'batch_size :{args.batch_size}\n')
+    out.writelines(f"atom_fea_len :{args.atom_fea_len}\n")
+    out.writelines(f"n_conv :{args.n_conv}\n")
+    out.writelines(f"epochs :{args.epochs}\n")
+    out.writelines(f"batch_size :{args.batch_size}\n")
     # endregion
     # region 数据集
     dataset = CIFData(args.data_path, args.max_num_nbr, args.radius)
@@ -287,13 +300,15 @@ def main():
         atom_fea_len=args.atom_fea_len,
         n_conv=args.n_conv,
         h_fea_len=args.h_fea_len,
-        n_h=args.n_h
+        n_h=args.n_h,
     )
     model.to(device)
     # endregion
     # region 导入预训练AE来初始化模型
     if args.pretrained_path != None:
-        model.load_state_dict(torch.load(args.pretrained_path, map_location=device), strict=False)
+        model.load_state_dict(
+            torch.load(args.pretrained_path, map_location=device), strict=False
+        )
         print("Loaded pretrained model!!!")
     # endregion
     # region 定义损失函数和优化器
@@ -337,8 +352,16 @@ def main():
         out.writelines(
             f"Epoch Summary : Epoch : {epoch} Train Mean Loss : {train_loss} Train MAE : {train_mae} Val Mean Loss : {val_loss} Val MAE : {val_mae} Best Val MAE : {best_mae_error}\n"
         )
-    show(os.path.join(path, "loss.png"), args.epochs, {"train_loss":np.array(train_loss_list), "val_loss":np.array(val_loss_list)})
-    show(os.path.join(path, "mae.png"), args.epochs, {"train_mae":np.array(train_mae_list), "val_mae":np.array(val_mae_list)})
+    show(
+        os.path.join(path, "loss.png"),
+        args.epochs,
+        {"train_loss": np.array(train_loss_list), "val_loss": np.array(val_loss_list)},
+    )
+    show(
+        os.path.join(path, "mae.png"),
+        args.epochs,
+        {"train_mae": np.array(train_mae_list), "val_mae": np.array(val_mae_list)},
+    )
     # endregion
     best_model = CrystalGraphConvNet(
         orig_atom_fea_len,
@@ -346,16 +369,15 @@ def main():
         atom_fea_len=args.atom_fea_len,
         n_conv=args.n_conv,
         h_fea_len=args.h_fea_len,
-        n_h=args.n_h
+        n_h=args.n_h,
     )
-    best_model.load_state_dict(torch.load(os.path.join(path, "models", "best_model.pth")))
+    best_model.load_state_dict(
+        torch.load(os.path.join(path, "models", "best_model.pth"))
+    )
     best_model.to(device)
-    test_mae = test(test_loader,best_model, normalizer, device)
+    test_mae = test(test_loader, best_model, normalizer, device)
     out.writelines(f"Test MAE : {test_mae}\n")
 
 
 if __name__ == "__main__":
-    seed = 123
-    torch.manual_seed(seed)
-    np.random.seed(seed)
     main()

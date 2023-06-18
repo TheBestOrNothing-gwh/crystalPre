@@ -62,9 +62,9 @@ def show(path, epochs, y):
     x = np.array(range(epochs))
     for name, value in y.items():
         ax.plot(x, value, label=name)
-    ax.set_xlabel('x label')
-    ax.set_ylabel('y label')
-    ax.set_title('learning curve')
+    ax.set_xlabel("x label")
+    ax.set_ylabel("y label")
+    ax.set_title("learning curve")
     ax.legend()
     plt.savefig(path)
 

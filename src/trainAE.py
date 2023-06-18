@@ -3,6 +3,7 @@ import os
 import datetime
 import argparse
 import numpy as np
+import random
 from tqdm import tqdm
 import torch
 import torch.optim as optim
@@ -11,7 +12,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 from data import *
 from model import *
 from tools import *
-       
+
 
 def train(loader, model, optimizer, device, split):
     total_losses = AverageMeter()
@@ -40,14 +41,10 @@ def train(loader, model, optimizer, device, split):
         adj, atom_fea = model(*input_var)
         # 计算loss
         loss_adj = F.nll_loss(adj, output_var, weight=pos_weight)
-        loss_atom_fea = F.binary_cross_entropy_with_logits(
-                atom_fea, input_var[0]
-            )
+        loss_atom_fea = F.binary_cross_entropy_with_logits(atom_fea, input_var[0])
         loss = loss_adj * split[0] + loss_atom_fea * split[1]
         adj_reconst_losses.update(loss_adj, len(input_var[3]))
-        feature_reconst_losses.update(
-            loss_atom_fea, len(input_var[3])
-        )
+        feature_reconst_losses.update(loss_atom_fea, len(input_var[3]))
         total_losses.update(loss, len(input_var[3]))
         # 反向传播
         optimizer.zero_grad()
@@ -119,12 +116,19 @@ def args_parse():
         "--momentum", default=0.9, type=float, metavar="M", help="momentum"
     )
     parser.add_argument(
-        "--global_local_split", type=float, nargs='+', default=[0.9, 0.1], help="global:local"
+        "--global_local_split",
+        type=float,
+        nargs="+",
+        default=[0.9, 0.1],
+        help="global:local",
     )
     # endregion
     # region 其他参数
     parser.add_argument(
         "--timezone", type=str, default="Asia/Shanghai", help="Set the Timezone"
+    )
+    parser.add_argument(
+        "--random_seed", type=int, default=123, help="Set the random seed"
     )
     # endregion
     args = parser.parse_args()
@@ -133,10 +137,13 @@ def args_parse():
 
 def main():
     args = args_parse()
-    # region 检查参数是否合法
     assert (
         abs(args.global_local_split[0] + args.global_local_split[1] - 1) <= 1e-5
     ), "global + local == 1"
+    # region 设置随机数种子
+    random.seed()
+    torch.manual_seed(args.random_seed)
+    np.random.seed(args.random_seed)
     # endregion
     # region 设置时间
     eastern = pytz.timezone(args.timezone)
@@ -155,14 +162,14 @@ def main():
     # endregion
     # region 初始的日志信息
     out = open(os.path.join(path, "out.txt"), "w")
-    out.writelines(f'data_path :{args.data_path}\n')
-    out.writelines(f'radius :{args.radius}\n')
-    out.writelines(f'max_num_nbr :{args.max_num_nbr}\n')
+    out.writelines(f"data_path :{args.data_path}\n")
+    out.writelines(f"radius :{args.radius}\n")
+    out.writelines(f"max_num_nbr :{args.max_num_nbr}\n")
     out.writelines("***** Hyper-Parameters Details ********\n")
-    out.writelines(f'atom_fea_len :{args.atom_fea_len}\n')
-    out.writelines(f'n_conv :{args.n_conv}\n')
-    out.writelines(f'epochs :{args.epochs}\n')
-    out.writelines(f'batch_size :{args.batch_size}\n')
+    out.writelines(f"atom_fea_len :{args.atom_fea_len}\n")
+    out.writelines(f"n_conv :{args.n_conv}\n")
+    out.writelines(f"epochs :{args.epochs}\n")
+    out.writelines(f"batch_size :{args.batch_size}\n")
     # endregion
     # region 数据集
     full_dataset = CIFData(args.data_path, args.max_num_nbr, args.radius)
@@ -227,14 +234,23 @@ def main():
         out.writelines(
             f"Epoch Summary : Epoch : {epoch} Total Loss : {total_loss} Adj Reconst Loss : {adj_reconst_loss} Feature Reconst Loss : {feature_reconst_loss}\n"
         )
-    show(os.path.join(path, "total_loss.png"), args.epochs, {"total_loss":np.array(total_loss_list)})
-    show(os.path.join(path, "adj_reconst_loss.png"), args.epochs, {"adj_reconst_loss":np.array(adj_reconst_loss_list)})
-    show(os.path.join(path, "feature_reconst_loss.png"), args.epochs, {"feature_reconst_loss":np.array(feature_reconst_loss_list)})
+    show(
+        os.path.join(path, "total_loss.png"),
+        args.epochs,
+        {"total_loss": np.array(total_loss_list)},
+    )
+    show(
+        os.path.join(path, "adj_reconst_loss.png"),
+        args.epochs,
+        {"adj_reconst_loss": np.array(adj_reconst_loss_list)},
+    )
+    show(
+        os.path.join(path, "feature_reconst_loss.png"),
+        args.epochs,
+        {"feature_reconst_loss": np.array(feature_reconst_loss_list)},
+    )
     # endregion
-    
+
 
 if __name__ == "__main__":
-    seed = 123
-    torch.manual_seed(seed)
-    np.random.seed(seed)
     main()
