@@ -179,7 +179,7 @@ def args_parse():
     )
     parser.add_argument(
         "--lr_milestones",
-        default=[100],
+        default=[1000],
         nargs="+",
         type=int,
         metavar="N",
@@ -279,10 +279,10 @@ def main():
         num_workers=args.workers,
         pin_memory=args.pin_memory,
     )
-    # 选择2000个样本用来估计均值、方差
+    # 选择至多1000*batch个样本用来估计均值、方差
     target_list = []
     count = 0
-    for _, (_, target, _) in enumerate(train_loader):
+    for _, (_, target, _) in tqdm(enumerate(train_loader)):
         count += 1
         if count > args.sample:
             break

@@ -1,0 +1,14 @@
+data_path :/home/gwh/project/crystalProject/DATA/cofs_Methane/structures_small
+radius :8
+max_num_nbr :12
+***** Hyper-Parameters Details ********
+atom_fea_len :64
+n_conv :3
+epochs :5
+batch_size :32
+Epoch Summary : Epoch : 0 Train Mean Loss : 0.7311114072799683 Train MAE : 8.66390609741211 Val Mean Loss : 0.6883586645126343 Val MAE : 9.470529556274414 Best Val MAE : 9.470529556274414
+Epoch Summary : Epoch : 1 Train Mean Loss : 0.5965735912322998 Train MAE : 7.891297340393066 Val Mean Loss : 0.5883054733276367 Val MAE : 8.076629638671875 Best Val MAE : 8.076629638671875
+Epoch Summary : Epoch : 2 Train Mean Loss : 0.5621395111083984 Train MAE : 7.661884784698486 Val Mean Loss : 0.5270432233810425 Val MAE : 7.292093753814697 Best Val MAE : 7.292093753814697
+Epoch Summary : Epoch : 3 Train Mean Loss : 0.5354210138320923 Train MAE : 7.454592227935791 Val Mean Loss : 0.5768729448318481 Val MAE : 8.66447639465332 Best Val MAE : 7.292093753814697
+Epoch Summary : Epoch : 4 Train Mean Loss : 0.5169731378555298 Train MAE : 7.288666248321533 Val Mean Loss : 0.6792377233505249 Val MAE : 8.124940872192383 Best Val MAE : 7.292093753814697
+Test MAE : 7.292097091674805

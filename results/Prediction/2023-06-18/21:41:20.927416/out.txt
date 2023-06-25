@@ -1,0 +1,14 @@
+data_path :/home/gwh/project/crystalProject/DATA/data
+radius :8
+max_num_nbr :12
+***** Hyper-Parameters Details ********
+atom_fea_len :64
+n_conv :3
+epochs :5
+batch_size :32
+Epoch Summary : Epoch : 0 Train Mean Loss : 0.20194971561431885 Train MAE : 0.33315154910087585 Val Mean Loss : 0.10964976996183395 Val MAE : 0.27894312143325806 Best Val MAE : 0.27894312143325806
+Epoch Summary : Epoch : 1 Train Mean Loss : 0.08412371575832367 Train MAE : 0.23590975999832153 Val Mean Loss : 0.042832836508750916 Val MAE : 0.15477074682712555 Best Val MAE : 0.15477074682712555
+Epoch Summary : Epoch : 2 Train Mean Loss : 0.06345716863870621 Train MAE : 0.19990259408950806 Val Mean Loss : 0.051243629306554794 Val MAE : 0.17117191851139069 Best Val MAE : 0.15477074682712555
+Epoch Summary : Epoch : 3 Train Mean Loss : 0.05169549956917763 Train MAE : 0.1752501279115677 Val Mean Loss : 0.041938334703445435 Val MAE : 0.16787122189998627 Best Val MAE : 0.15477074682712555
+Epoch Summary : Epoch : 4 Train Mean Loss : 0.04764166474342346 Train MAE : 0.16652128100395203 Val Mean Loss : 0.032645247876644135 Val MAE : 0.1322145015001297 Best Val MAE : 0.1322145015001297
+Test MAE : 0.13221454620361328
